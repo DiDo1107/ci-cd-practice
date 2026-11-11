@@ -1,0 +1,61 @@
+# Кейс 2: автоматический запуск юнит-тестов при каждом коммите.
+# Аналог .gitlab-ci.yml для GitHub Actions (GitLab.com требует подтверждения
+# аккаунта по телефону/карте, что недоступно из РФ).
+name: Unit tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run unit tests
+        run: pytest -v --junitxml=report.xml --cov=app --cov-report=term --cov-report=xml
+
+      - name: Test summary
+        if: always()
+        run: |
+          python - <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          import xml.etree.ElementTree as ET
+          root = ET.parse("report.xml").getroot()
+          s = root if root.tag == "testsuite" else root.find("testsuite")
+          total, fail, err, skip = (int(s.get(k, 0)) for k in ("tests", "failures", "errors", "skipped"))
+          passed = total - fail - err - skip
+          cov = float(ET.parse("coverage.xml").getroot().get("line-rate")) * 100
+          print("## Результаты юнит-тестов\n")
+          print("| Всего | ✅ Успешно | ❌ Упало | ⚠️ Ошибки | ⏭ Пропущено | Покрытие |")
+          print("|---|---|---|---|---|---|")
+          print(f"| {total} | {passed} | {fail} | {err} | {skip} | {cov:.0f}% |\n")
+          print("| Тест | Статус |\n|---|---|")
+          for tc in s.iter("testcase"):
+              bad = tc.find("failure") is not None or tc.find("error") is not None
+              print(f"| `{tc.get('classname')}.{tc.get('name')}` | {'❌' if bad else '✅'} |")
+          EOF
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: |
+            report.xml
+            coverage.xml
