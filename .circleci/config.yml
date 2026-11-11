@@ -1,0 +1,78 @@
+# Кейс 3: CircleCI — сборка, тесты и автоматическое развертывание при пуше в main.
+# Вместо Heroku используется Render.com (у Heroku нет бесплатного тарифа,
+# а оплата из РФ недоступна). Деплой запускается через Deploy Hook Render.
+#
+# Переменные окружения проекта в CircleCI (Project Settings → Environment Variables):
+#   RENDER_DEPLOY_HOOK — URL deploy hook из настроек сервиса Render
+#   RENDER_APP_URL     — публичный адрес приложения, например https://ci-cd-practice.onrender.com
+version: 2.1
+
+jobs:
+  build-and-test:
+    docker:
+      - image: cimg/python:3.12
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - pip-v1-{{ checksum "requirements-dev.txt" }}
+      - run:
+          name: Install dependencies
+          command: pip install -r requirements-dev.txt
+      - save_cache:
+          key: pip-v1-{{ checksum "requirements-dev.txt" }}
+          paths:
+            - ~/.cache/pip
+      - run:
+          name: Lint
+          command: flake8 .
+      - run:
+          name: Unit tests
+          command: |
+            mkdir -p test-results
+            pytest -v --junitxml=test-results/junit.xml
+      - run:
+          name: Build package
+          command: python -m build
+      - store_test_results:
+          path: test-results
+      - store_artifacts:
+          path: dist
+
+  deploy:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - run:
+          name: Trigger deploy on Render
+          command: |
+            curl -fsS -X POST "${RENDER_DEPLOY_HOOK}&ref=${CIRCLE_SHA1}"
+            echo "Deploy of commit ${CIRCLE_SHA1} triggered"
+      - run:
+          name: Wait for new version to be live
+          no_output_timeout: 15m
+          command: |
+            for i in $(seq 1 60); do
+              body=$(curl -fsS "${RENDER_APP_URL}/" || true)
+              echo "[$i] ${body}"
+              if echo "${body}" | grep -q "${CIRCLE_SHA1:0:7}"; then
+                echo "New version is live: ${RENDER_APP_URL}"
+                exit 0
+              fi
+              sleep 15
+            done
+            echo "Deployment did not become live in time"; exit 1
+      - run:
+          name: Smoke test
+          command: curl -fsS "${RENDER_APP_URL}/health"
+
+workflows:
+  build-test-deploy:
+    jobs:
+      - build-and-test
+      - deploy:
+          requires:
+            - build-and-test
+          filters:
+            branches:
+              only: main

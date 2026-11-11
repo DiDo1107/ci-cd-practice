@@ -6,13 +6,15 @@ from flask import Flask, jsonify
 from app.calculator import add, divide, multiply, subtract
 
 APP_VERSION = os.getenv("APP_VERSION", "1.0.0")
+# Render/Heroku передают хеш коммита, из которого собрано приложение
+GIT_COMMIT = os.getenv("RENDER_GIT_COMMIT") or os.getenv("SOURCE_VERSION") or "local"
 
 app = Flask(__name__)
 
 
 @app.route("/")
 def index():
-    return jsonify(message="Hello from CI/CD practice!", version=APP_VERSION)
+    return jsonify(message="Hello from CI/CD practice!", version=APP_VERSION, commit=GIT_COMMIT)
 
 
 @app.route("/health")
