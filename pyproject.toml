@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ci-cd-practice"
+version = "1.0.0"
+description = "Простое Flask-приложение для практики CI/CD"
+requires-python = ">=3.10"
+dependencies = ["flask>=3.0"]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
