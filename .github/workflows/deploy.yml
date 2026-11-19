@@ -1,0 +1,42 @@
+# Кейс 10: автоматическое применение миграций БД (Flyway) при каждом развертывании
+name: Deploy with DB migrations
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: app
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U app" --health-interval 5s --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply DB migrations (Flyway)
+        run: |
+          docker run --rm --network host -v "$PWD/db/migration:/flyway/sql" flyway/flyway:10 \
+            -url=jdbc:postgresql://localhost:5432/app -user=app -password=app migrate
+
+      - name: Show migration status
+        run: |
+          docker run --rm --network host -v "$PWD/db/migration:/flyway/sql" flyway/flyway:10 \
+            -url=jdbc:postgresql://localhost:5432/app -user=app -password=app info
+
+      - name: Deploy application
+        run: |
+          docker build -t ci-cd-practice:${{ github.sha }} .
+          docker run -d --name app -p 5000:5000 ci-cd-practice:${{ github.sha }}
+          for i in $(seq 1 15); do curl -fsS localhost:5000/health && exit 0; sleep 2; done
+          exit 1

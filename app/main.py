@@ -34,4 +34,6 @@ def calc(op, a, b):
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")))
+    # Встроенный сервер Flask — только для локальной разработки.
+    # В контейнере приложение запускается через gunicorn (см. Dockerfile).
+    app.run(host=os.getenv("HOST", "127.0.0.1"), port=int(os.getenv("PORT", "5000")))

@@ -1,0 +1,26 @@
+# Кейс 9: анализ безопасности кода и зависимостей при каждом коммите
+name: Security scan
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install tools
+        run: pip install bandit pip-audit
+
+      - name: SAST — Bandit (уязвимости в коде)
+        run: bandit -r app -f txt
+
+      - name: SCA — pip-audit (уязвимые зависимости)
+        run: pip-audit -r requirements.txt
