@@ -1,0 +1,44 @@
+# Кейс 7: автоматический релиз на GitHub при пуше тега v*
+# — генерирует changelog из коммитов с прошлого тега
+# — прикрепляет собранные артефакты (wheel и sdist)
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build artifacts
+        run: |
+          pip install build
+          python -m build
+
+      - name: Generate changelog
+        run: |
+          prev=$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)
+          range=${prev:+$prev..}${GITHUB_REF_NAME}
+          {
+            echo "## Changelog ${prev:+($prev → ${GITHUB_REF_NAME})}"
+            echo
+            git log "$range" --pretty=format:'- %s (%h)' --no-merges
+          } > CHANGELOG.md
+          cat CHANGELOG.md
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --title "Release $GITHUB_REF_NAME" --notes-file CHANGELOG.md
