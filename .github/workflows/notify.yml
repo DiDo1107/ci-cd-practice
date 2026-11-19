@@ -1,0 +1,36 @@
+# Кейс 6: уведомление о статусе пайплайна (успешно/неудачно) в Telegram.
+# Срабатывает после каждого завершения пайплайна CI.
+# Секреты репозитория: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+name: Notify
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+jobs:
+  telegram:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Telegram notification
+        env:
+          TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          RESULT: ${{ github.event.workflow_run.conclusion }}
+          WORKFLOW: ${{ github.event.workflow_run.name }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          COMMIT: ${{ github.event.workflow_run.head_commit.message }}
+          AUTHOR: ${{ github.event.workflow_run.head_commit.author.name }}
+          URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          if [ "$RESULT" = "success" ]; then ICON="✅"; STATUS="успешно"; else ICON="❌"; STATUS="неудачно ($RESULT)"; fi
+          TEXT="$ICON Пайплайн $WORKFLOW: $STATUS
+          Репозиторий: $GITHUB_REPOSITORY
+          Ветка: $BRANCH
+          Коммит: ${COMMIT%%$'\n'*}
+          Автор: $AUTHOR
+          $URL"
+          curl -fsS -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${CHAT_ID}" \
+            --data-urlencode "text=${TEXT}" -o /dev/null
+          echo "Notification sent: $RESULT"
