@@ -1,17 +1,23 @@
 # Кейс 2: автоматический запуск юнит-тестов при каждом коммите (GitLab CI/CD)
+# Кейс 8: сборка Docker-образа и развертывание в Kubernetes с помощью Helm
 stages:
   - test
+  - build
+  - deploy
 
 variables:
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
-
-cache:
-  paths:
-    - .cache/pip
+  # Временный публичный реестр ttl.sh (без регистрации, образ хранится 24 часа)
+  IMAGE: "ttl.sh/ci-cd-practice-$CI_PROJECT_ID-$CI_COMMIT_SHORT_SHA:24h"
+  K8S_NAMESPACE: ci-cd-practice
+  RELEASE: ci-cd-practice
 
 unit-tests:
   stage: test
   image: python:3.12-slim
+  cache:
+    paths:
+      - .cache/pip
   before_script:
     - python --version
     - pip install -r requirements-dev.txt
@@ -29,3 +35,32 @@ unit-tests:
     - if: $CI_PIPELINE_SOURCE == "push"
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_PIPELINE_SOURCE == "web"
+
+build-image:
+  stage: build
+  image: docker:27-cli
+  script:
+    - docker build -t "$IMAGE" .
+    - docker push "$IMAGE"
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+deploy-k8s:
+  stage: deploy
+  image: alpine/k8s:1.31.4
+  environment:
+    name: kubernetes
+  script:
+    - kubectl version
+    - helm lint helm/ci-cd-practice
+    - >
+      helm upgrade --install "$RELEASE" helm/ci-cd-practice
+      --namespace "$K8S_NAMESPACE"
+      --set image.repository="${IMAGE%:*}"
+      --set image.tag="${IMAGE##*:}"
+      --set appVersion="$CI_COMMIT_SHORT_SHA"
+      --wait --timeout 5m
+    - helm list -n "$K8S_NAMESPACE"
+    - kubectl get deploy,pods,svc -n "$K8S_NAMESPACE" -o wide
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

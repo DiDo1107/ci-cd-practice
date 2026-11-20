@@ -1,0 +1,21 @@
+replicaCount: 2
+
+image:
+  repository: ci-cd-practice
+  tag: latest
+  pullPolicy: IfNotPresent
+
+appVersion: "1.0.0"
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 5000
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 250m
+    memory: 128Mi
